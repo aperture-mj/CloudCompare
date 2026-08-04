@@ -160,7 +160,19 @@ protected: //methods
 	void displayError(QString message);
 
 	//! Generates the segmented point cloud
-	ccPointCloud* createSegmentedCloud(ccPointCloud* cloud, bool removeSelected, bool& error);
+	/** \param cloud source cloud (current working cloud)
+		\param removeSelected whether to keep the non-selected points (true) or the selected ones (false)
+		\param suffix suffix appended to the source cloud's name (if not already present)
+		\param error set to true if the operation failed because of a memory allocation issue
+		\return the new cloud, or nullptr if either the operation failed (error = true) or the
+			requested subset is empty (error = false, e.g. nothing was selected)
+	**/
+	ccPointCloud* createSegmentedCloud(ccPointCloud* cloud, bool removeSelected, const QString& suffix, bool& error);
+
+	//! Merges newly removed points into the session-wide 'removed points' accumulator
+	/** \warning takes ownership of (and may delete) 'removedThisPass'
+	**/
+	void accumulateRemovedPoints(ccPointCloud* removedThisPass);
 
 	//inherited from QWidget
 	void closeEvent(QCloseEvent*);
@@ -297,6 +309,9 @@ protected: //members
 
 	//! First cloud
 	ccPointCloud* m_initialCloud;
+
+	//! Points removed so far this session (across one or more 'Apply' passes), pending finalization
+	ccPointCloud* m_removedPoints;
 };
 
 #endif

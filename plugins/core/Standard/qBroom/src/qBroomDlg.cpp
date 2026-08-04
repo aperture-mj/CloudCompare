@@ -92,6 +92,7 @@ qBroomDlg::qBroomDlg(ccMainAppInterface* app/*=nullptr*/)
 	, m_selectionMode(ABOVE)
 	, m_app(app)
 	, m_initialCloud(nullptr)
+	, m_removedPoints(nullptr)
 {
 	setupUi(this);
 
@@ -194,6 +195,12 @@ qBroomDlg::~qBroomDlg()
 	{
 		delete m_boxes;
 		m_boxes = nullptr;
+	}
+	if (m_removedPoints)
+	{
+		//not handed off to the DB (dialog was cancelled/rejected before validation)
+		delete m_removedPoints;
+		m_removedPoints = nullptr;
 	}
 }
 
@@ -1913,7 +1920,7 @@ void qBroomDlg::displayError(QString message)
 	}
 }
 
-ccPointCloud* qBroomDlg::createSegmentedCloud(ccPointCloud* cloud, bool removeSelected, bool& error)
+ccPointCloud* qBroomDlg::createSegmentedCloud(ccPointCloud* cloud, bool removeSelected, const QString& suffix, bool& error)
 {
 	error = false;
 
@@ -1935,12 +1942,10 @@ ccPointCloud* qBroomDlg::createSegmentedCloud(ccPointCloud* cloud, bool removeSe
 		{
 			selectedCount = cloud->size() - selectedCount;
 		}
-		
+
 		if (selectedCount == 0)
 		{
-			assert(false);
-			//nothing to do
-			accept();
+			//this subset is empty (e.g. nothing was selected, or everything was) - not an error
 			return nullptr;
 		}
 	}
@@ -1974,13 +1979,31 @@ ccPointCloud* qBroomDlg::createSegmentedCloud(ccPointCloud* cloud, bool removeSe
 	}
 
 	QString name = cloud->getName();
-	if (!name.endsWith(".segmented"))
+	if (!name.endsWith(suffix))
 	{
-		name += ".segmented";
+		name += suffix;
 	}
 	newCloud->setName(name);
 
 	return newCloud;
+}
+
+void qBroomDlg::accumulateRemovedPoints(ccPointCloud* removedThisPass)
+{
+	if (!removedThisPass)
+	{
+		return;
+	}
+
+	if (!m_removedPoints)
+	{
+		m_removedPoints = removedThisPass;
+	}
+	else
+	{
+		(*m_removedPoints) += removedThisPass;
+		delete removedThisPass;
+	}
 }
 
 void qBroomDlg::apply()
@@ -1990,24 +2013,41 @@ void qBroomDlg::apply()
 
 	ccViewportParameters formerViewport = m_glWindow->getViewportParameters();
 	m_cloud.restore();
-	
-	bool error;
-	ccPointCloud* newCloud = createSegmentedCloud(m_cloud.ref, removeSelectedPointsCheckBox->isChecked(), error);
-	if (!newCloud)
+
+	bool error = false;
+	ccPointCloud* keptCloud = createSegmentedCloud(m_cloud.ref, removeSelectedPointsCheckBox->isChecked(), ".clean", error);
+	if (error)
 	{
-		if (error)
-		{
-			displayError(tr("Not enough memory"));
-		}
+		displayError(tr("Not enough memory"));
+	}
+
+	if (!keptCloud)
+	{
+		//nothing to do (trivial selection): simply restore the current cloud as-is
 		ccPointCloud* formerCloud = m_cloud.ref;
 		bool ownCloud = m_cloud.ownCloud;
-		m_cloud.ownCloud = false; //to prevent if from being deleted!
-		
+		m_cloud.ownCloud = false; //to prevent it from being deleted!
+
 		setCloud(nullptr, false);
 		setCloud(formerCloud, ownCloud, false);
 	}
+	else
+	{
+		//accumulate the complementary (removed) points *before* switching the working cloud below
+		//(createSegmentedCloud relies on the current m_selectionTable, which setCloud() is about to reset)
+		bool removedError = false;
+		ccPointCloud* removedThisPass = createSegmentedCloud(m_cloud.ref, !removeSelectedPointsCheckBox->isChecked(), ".removed", removedError);
+		if (removedError)
+		{
+			displayError(tr("Not enough memory (removed points could not be tracked)"));
+		}
+		else
+		{
+			accumulateRemovedPoints(removedThisPass);
+		}
 
-	setCloud(newCloud, true, false);
+		setCloud(keptCloud, true, false);
+	}
 
 	//restore the previous viewport
 	m_glWindow->setViewportParameters(formerViewport);
@@ -2051,50 +2091,90 @@ void qBroomDlg::validate()
 	setCloud(nullptr);
 	//m_cloud.restore(); //already called by setCloud
 
-	ccPointCloud* newCloud = nullptr;
+	ccPointCloud* keptCloud = nullptr;
 	if (!m_undoPositions.empty())
 	{
-		bool error;
-		newCloud = createSegmentedCloud(cloud, removeSelectedPointsCheckBox->isChecked(), error);
-		if (!newCloud)
+		bool error = false;
+		keptCloud = createSegmentedCloud(cloud, removeSelectedPointsCheckBox->isChecked(), ".clean", error);
+
+		if (error)
 		{
-			if (ownCloud)
+			displayError(tr("Not enough memory to apply the last segmentation"));
+			if (!ownCloud)
 			{
-				if (error)
-				{
-					displayError(tr("Not enough memory to apply the last segmentation"));
-				}
-				newCloud = cloud;
-			}
-			else if (error)
-			{
-				displayError(tr("Not enough memory"));
 				reject();
 				return;
+			}
+			//we still own 'cloud': fall back to finalizing with what we had before this (failed) pass
+			keptCloud = cloud;
+		}
+		else if (!keptCloud)
+		{
+			//trivial case: nothing left to remove in this final pass
+			keptCloud = cloud;
+		}
+		else
+		{
+			//accumulate this final pass' removed points too, so the clean + removed clouds
+			//together still losslessly account for the whole original cloud
+			bool removedError = false;
+			ccPointCloud* removedThisPass = createSegmentedCloud(cloud, !removeSelectedPointsCheckBox->isChecked(), ".removed", removedError);
+			if (removedError)
+			{
+				displayError(tr("Not enough memory (removed points could not be tracked)"));
+			}
+			else
+			{
+				accumulateRemovedPoints(removedThisPass);
+			}
+
+			//'cloud' has now been superseded by keptCloud: if the dialog owned it, it's no longer needed
+			if (ownCloud)
+			{
+				delete cloud;
 			}
 		}
 	}
 	else if (ownCloud)
 	{
-		newCloud = cloud;
+		keptCloud = cloud;
 	}
 
-	if (newCloud)
+	if (keptCloud)
 	{
-		if (newCloud->getDisplay() == m_glWindow)
+		if (keptCloud->getDisplay() == m_glWindow)
 		{
 			assert(false);
-			newCloud->setDisplay(nullptr);
+			keptCloud->setDisplay(nullptr);
 		}
 
+		ccHObject* parent = m_initialCloud ? m_initialCloud->getParent() : nullptr;
+
+		if (parent)
+		{
+			parent->addChild(keptCloud);
+		}
+		m_app->addToDB(keptCloud);
+		m_app->setSelectedInDB(keptCloud, true);
+
+		if (m_removedPoints)
+		{
+			m_removedPoints->setDisplay(nullptr);
+			if (parent)
+			{
+				parent->addChild(m_removedPoints);
+			}
+			m_app->addToDB(m_removedPoints);
+			m_removedPoints = nullptr; //ownership transferred to the DB tree
+		}
+
+		//the clean + removed clouds now account for the whole original cloud losslessly:
+		//no need to keep the (potentially much heavier) original one around anymore
 		if (m_initialCloud)
 		{
-			if (m_initialCloud->getParent())
-				m_initialCloud->getParent()->addChild(newCloud);
-			m_initialCloud->setEnabled(false);
+			m_app->removeFromDB(m_initialCloud, true);
+			m_initialCloud = nullptr;
 		}
-		m_app->addToDB(newCloud);
-		m_app->setSelectedInDB(newCloud, true);
 	}
 
 	accept();
