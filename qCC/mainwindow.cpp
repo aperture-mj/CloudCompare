@@ -10720,6 +10720,21 @@ void MainWindow::addToDB(const QStringList&   filenames,
 				}
 			}
 
+			{
+				// prefer RGB colors over scalar fields by default when a cloud has both
+				// (some formats, e.g. E57, turn on both display flags, and SF otherwise wins)
+				ccHObject::Container clouds;
+				newGroup->filterChildren(clouds, true, CC_TYPES::POINT_CLOUD);
+				for (ccHObject* cloud : clouds)
+				{
+					if (cloud && cloud->hasColors() && cloud->sfShown())
+					{
+						cloud->showSF(false);
+						cloud->showColors(true);
+					}
+				}
+			}
+
 			if (destWin)
 			{
 				newGroup->setDisplay_recursive(destWin);
