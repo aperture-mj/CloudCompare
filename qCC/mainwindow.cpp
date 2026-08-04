@@ -11070,10 +11070,13 @@ void MainWindow::doActionSaveFile()
 			{
 				defaultFileName = parts[0];
 			}
-		}
 
-		// we remove the extension
-		defaultFileName = QFileInfo(defaultFileName).completeBaseName();
+			// this first part still has its original file extension (see comment above): strip it
+			// (a new one will be added based on the selected save filter). Regular entity names
+			// (e.g. "Model 0.01m Subsample") have no real extension, so we leave them untouched -
+			// otherwise a dot that's just part of the name gets mistaken for one.
+			defaultFileName = QFileInfo(defaultFileName).completeBaseName();
+		}
 
 		if (!IsValidFileName(defaultFileName))
 		{
@@ -11225,10 +11228,12 @@ void MainWindow::doActionSaveProject()
 			{
 				defaultFileName = parts[0];
 			}
-		}
 
-		// we remove the extension
-		defaultFileName = QFileInfo(defaultFileName).completeBaseName();
+			// this first part still has its original file extension (see comment above): strip it.
+			// Regular entity names (e.g. "Model 0.01m Subsample") have no real extension, so we
+			// leave them untouched - otherwise a dot that's just part of the name gets mistaken for one.
+			defaultFileName = QFileInfo(defaultFileName).completeBaseName();
+		}
 
 		if (!IsValidFileName(defaultFileName))
 		{
