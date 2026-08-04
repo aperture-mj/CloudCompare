@@ -35,6 +35,8 @@
 #include <ScalarField.h>
 
 // Qt
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QInputDialog>
 
 // System
@@ -317,6 +319,17 @@ void ccPointPropertiesDlg::processPickedPoint(const PickedItem& picked)
 	for (QString& row : body)
 	{
 		ccLog::Print(QString("[Picked]\t- ") + row);
+	}
+
+	// copy the picked point's coordinates to the clipboard (single-point info mode only)
+	if (m_pickingMode == POINT_INFO)
+	{
+		int     precision = ccGui::Parameters().displayedNumPrecision;
+		QString coordsStr = QString("%1,%2,%3")
+		                        .arg(picked.P3D.x, 0, 'f', precision)
+		                        .arg(picked.P3D.y, 0, 'f', precision)
+		                        .arg(picked.P3D.z, 0, 'f', precision);
+		QGuiApplication::clipboard()->setText(coordsStr);
 	}
 
 	if (m_associatedWin)
