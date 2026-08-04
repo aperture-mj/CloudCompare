@@ -21,6 +21,10 @@ New features:
 		- distances between a point cloud and a disc can be computed with 'Tools > Distances > Cloud/primitive dist'
 
 	- New Command line options
+		- New command -MATCH_SCALES {BB_MAX_DIM|BB_VOLUME|PCA_MAX_DIM|ICP} [-REFERENCE {index}] [-RMS_DIFF {value}] [-OVERLAP {percent}]
+			- ports the 'Tools > Registration > Match scales' tool to the command line
+			- rescales all loaded clouds/meshes to match the scale of the reference entity (0-based index, 0 by default)
+			- -RMS_DIFF and -OVERLAP only apply to the ICP algorithm (defaults: 1e-5 and 100 respectively)
 		- New command -DISTANCES_FROM_SENSOR [-SQUARED]
 			- to compute the distances from every point of the cloud to the associated sensor origin (if any)
 		- New command -SCATTERING_ANGLES [-DEGREES]
@@ -322,6 +326,10 @@ Improvements:
 			now apply to all selected DB tree item
 		- the 'Search by name and/or type' entry can now be applied with multiple entities selected at once
 
+	- 3D mouse support
+		- 3D mouse support on macOS, Linux and Windows (thanks to https://github.com/braunsi23 and Paul Rascle!)
+		- on Windows, option to compile with the 3DxWare SDK or the generic hidapi library
+
 	- Others:
 		- the Subsampling dialog won't allow the user to input sampling modulation parameters if all SF values are the same
 		- the shortcut to the 'Level' tool in the 'View' toolbar (left) has been removed. Contrarily to the other options in this toolbar,
@@ -382,6 +390,7 @@ Bug fixes:
 	- Despite what the tooltip was saying, using 0 as max edge length in the contour extraction option of the Cross Section tool would not lead to the
 		extraction of the convex hull.
 	- When using some tools and changing the selection was CloudCompare was still working, the tool could be applied to the newly selected entities
+	- The sphere detection feature of the point-pair-based-alignment tool could lead to a crash (2.14.alpha and 2.14.beta only)
 
 Unresolved anomalies:
 	- 'LAS.vlrs' meta-data items saved in BIN files with any version prior to 2.14.beta cannot be restored anymore due to Qt 6
