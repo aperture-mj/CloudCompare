@@ -66,6 +66,12 @@ class ccSubsamplingDlg : public QDialog
 	 **/
 	CCCoreLib::ReferenceCloud* getSampledCloud(ccGenericPointCloud* cloud, CCCoreLib::GenericProgressCallback* progressCb = nullptr);
 
+	//! Returns the currently selected sampling method
+	CC_SUBSAMPLING_METHOD getSamplingMethod() const;
+
+	//! Returns the current sampling value (meaning depends on the method), formatted as a trimmed string
+	QString getSamplingValueAsString() const;
+
 	//! Enables the SF modulation option (SPATIAL method)
 	void enableSFModulation(ScalarType sfMin, ScalarType sfMax);
 

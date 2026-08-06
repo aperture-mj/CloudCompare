@@ -4290,7 +4290,10 @@ void MainWindow::doActionSubsample()
 
 			if (newPointCloud)
 			{
-				newPointCloud->setName(cloud->getName() + QString(".subsampled"));
+				if (sDlg.getSamplingMethod() == ccSubsamplingDlg::SPATIAL)
+					newPointCloud->setName(cloud->getName() + QString(" ") + sDlg.getSamplingValueAsString());
+				else
+					newPointCloud->setName(cloud->getName() + QString(".subsampled"));
 				newPointCloud->copyGlobalShiftAndScale(*cloud);
 				newPointCloud->setDisplay(cloud->getDisplay());
 				newPointCloud->prepareDisplayForRefresh();

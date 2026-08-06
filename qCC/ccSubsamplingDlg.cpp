@@ -170,6 +170,18 @@ CCCoreLib::ReferenceCloud* ccSubsamplingDlg::getSampledCloud(ccGenericPointCloud
 	return nullptr;
 }
 
+ccSubsamplingDlg::CC_SUBSAMPLING_METHOD ccSubsamplingDlg::getSamplingMethod() const
+{
+	return static_cast<CC_SUBSAMPLING_METHOD>(m_ui->samplingMethodComboBox->currentIndex());
+}
+
+QString ccSubsamplingDlg::getSamplingValueAsString() const
+{
+	// same default ('g', shortest round-trip) formatting already used for
+	// embedding a numeric parameter in a cloud name, see qM3C2Process.cpp
+	return QString("%1").arg(m_ui->valueDoubleSpinBox->value());
+}
+
 void ccSubsamplingDlg::updateLabels()
 {
 	switch (m_ui->samplingMethodComboBox->currentIndex())
