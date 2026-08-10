@@ -621,10 +621,9 @@ void ccPointListPickingDlg::processPickedPoint(const PickedItem& picked)
 	QClipboard* clipboard = QApplication::clipboard();
 	if (clipboard)
 	{
-		CCVector3 P           = newLabel->getPickedPoint(0).getPointPosition();
-		int       precision   = m_associatedWin ? m_associatedWin->getDisplayParameters().displayedNumPrecision : 6;
-		int       indexInList = startIndexSpinBox->value() + static_cast<int>(m_orderedLabelsContainer->getChildrenNumber()) - 1;
-		clipboard->setText(QString("CC_POINT_#%0(%1;%2;%3)").arg(indexInList).arg(P.x, 0, 'f', precision).arg(P.y, 0, 'f', precision).arg(P.z, 0, 'f', precision));
+		CCVector3 P         = newLabel->getPickedPoint(0).getPointPosition();
+		int       precision = m_associatedWin ? m_associatedWin->getDisplayParameters().displayedNumPrecision : 6;
+		clipboard->setText(QString("%1,%2,%3").arg(P.x, 0, 'f', precision).arg(P.y, 0, 'f', precision).arg(P.z, 0, 'f', precision));
 	}
 
 	updateList();
