@@ -369,6 +369,13 @@ ccHObject* FileIOFilter::LoadFromFile(const QString&  filename,
 			QString    newName = child->getName();
 			if (newName.startsWith("unnamed"))
 			{
+				// several filters give new clouds a placeholder name like "unnamed - Cloud"
+				// (or "unnamed - Cloud #2", "unnamed - Cloud (part 2)", etc.) - drop the
+				// cosmetic "- Cloud" label before substituting the real filename in below,
+				// so e.g. "Nissan Position 835.pts" becomes "Nissan Position 835" in the
+				// DB tree, not "Nissan Position 835 - Cloud"
+				newName.remove(" - Cloud");
+
 				// we automatically replace occurrences of 'unnamed' in entities names by the base filename (no path, no extension)
 				newName.replace(QString("unnamed"), fi.completeBaseName());
 				child->setName(newName);
