@@ -95,6 +95,7 @@ constexpr char COMMAND_MATCH_SCALES_OVERLAP[]             = "OVERLAP";
 constexpr char COMMAND_BEST_FIT_PLANE[]                   = "BEST_FIT_PLANE";
 constexpr char COMMAND_BEST_FIT_PLANE_MAKE_HORIZ[]        = "MAKE_HORIZ";
 constexpr char COMMAND_BEST_FIT_PLANE_KEEP_LOADED[]       = "KEEP_LOADED";
+constexpr char COMMAND_BEST_FIT_PLANE_OUTPUT_INFO_FILE[]  = "OUTPUT_INFO_FILE";
 constexpr char COMMAND_ORIENT_NORMALS[]                   = "ORIENT_NORMS_MST";
 constexpr char COMMAND_SOR_FILTER[]                       = "SOR";
 constexpr char COMMAND_NOISE_FILTER[]                     = "NOISE";
@@ -124,6 +125,7 @@ constexpr char COMMAND_C2C_LOCAL_MODEL[]                  = "MODEL";
 constexpr char COMMAND_C2X_MAX_DISTANCE[]                 = "MAX_DIST";
 constexpr char COMMAND_C2X_OCTREE_LEVEL[]                 = "OCTREE_LEVEL";
 constexpr char COMMAND_STAT_TEST[]                        = "STAT_TEST";
+constexpr char COMMAND_STAT_FIT[]                         = "STAT_FIT";
 constexpr char COMMAND_DELAUNAY[]                         = "DELAUNAY";
 constexpr char COMMAND_DELAUNAY_AA[]                      = "AA";
 constexpr char COMMAND_DELAUNAY_BF[]                      = "BEST_FIT";
@@ -163,7 +165,9 @@ constexpr char COMMAND_ICP_SKIP_TX[]                      = "SKIP_TX";
 constexpr char COMMAND_ICP_SKIP_TY[]                      = "SKIP_TY";
 constexpr char COMMAND_ICP_SKIP_TZ[]                      = "SKIP_TZ";
 constexpr char COMMAND_ICP_C2M_DIST[]                     = "USE_C2M_DIST";
+constexpr char COMMAND_ICP_OUTPUT_MATRIX_FILE[]           = "OUTPUT_MATRIX_FILE";
 constexpr char COMMAND_PLY_EXPORT_FORMAT[]                = "PLY_EXPORT_FMT";
+constexpr char COMMAND_PLY_NO_SF_PREFIX[]                 = "PLY_NO_SF_PREFIX";
 constexpr char COMMAND_COMPUTE_GRIDDED_NORMALS[]          = "COMPUTE_NORMALS";
 constexpr char COMMAND_INVERT_NORMALS[]                   = "INVERT_NORMALS";
 constexpr char COMMAND_COMPUTE_OCTREE_NORMALS[]           = "OCTREE_NORMALS";
@@ -3859,8 +3863,9 @@ CommandMatchBestFitPlane::CommandMatchBestFitPlane()
 bool CommandMatchBestFitPlane::process(ccCommandLineInterface& cmd)
 {
 	// look for local options
-	bool makeCloudsHoriz = false;
-	bool keepLoaded      = false;
+	bool    makeCloudsHoriz = false;
+	bool    keepLoaded      = false;
+	QString outputInfoFile;
 
 	while (!cmd.arguments().empty())
 	{
@@ -3879,6 +3884,22 @@ bool CommandMatchBestFitPlane::process(ccCommandLineInterface& cmd)
 
 			keepLoaded = true;
 		}
+		else if (ccCommandLineInterface::IsCommand(argument, COMMAND_BEST_FIT_PLANE_OUTPUT_INFO_FILE))
+		{
+			// local option confirmed, we can move on
+			cmd.arguments().pop_front();
+
+			if (!cmd.arguments().empty())
+			{
+				outputInfoFile = cmd.arguments().front();
+				cmd.arguments().pop_front();
+				cmd.print(QObject::tr("Plane info file: %1").arg(outputInfoFile));
+			}
+			else
+			{
+				return cmd.error(QObject::tr("Missing argument: filename after '%1'").arg(COMMAND_BEST_FIT_PLANE_OUTPUT_INFO_FILE));
+			}
+		}
 		else
 		{
 			break; // as soon as we encounter an unrecognized argument, we break the local loop to go back to the main one!
@@ -3888,6 +3909,12 @@ bool CommandMatchBestFitPlane::process(ccCommandLineInterface& cmd)
 	if (cmd.clouds().empty())
 	{
 		return cmd.error(QObject::tr("No cloud available. Be sure to open one first!"));
+	}
+
+	// one info file is generated per cloud, so a forced output path can only describe a single one
+	if (!outputInfoFile.isEmpty() && cmd.clouds().size() > 1)
+	{
+		return cmd.error(QObject::tr("Option '%1' requires a single loaded cloud (%2 are loaded)").arg(COMMAND_BEST_FIT_PLANE_OUTPUT_INFO_FILE).arg(cmd.clouds().size()));
 	}
 
 	for (CLCloudDesc& desc : cmd.clouds())
@@ -3923,13 +3950,18 @@ bool CommandMatchBestFitPlane::process(ccCommandLineInterface& cmd)
 
 			// open text file to save plane related information
 			{
-				QString txtFilename = QObject::tr("%1/%2_BEST_FIT_PLANE_INFO").arg(desc.path, desc.basename);
-				if (cmd.addTimestamp())
+				// the user can force the output path, in which case it is used as is
+				QString txtFilename = outputInfoFile;
+				if (txtFilename.isEmpty())
 				{
-					QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_hh'h'mm_ss_zzz");
-					txtFilename += QObject::tr("_%1").arg(timestamp);
+					txtFilename = QObject::tr("%1/%2_BEST_FIT_PLANE_INFO").arg(desc.path, desc.basename);
+					if (cmd.addTimestamp())
+					{
+						QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_hh'h'mm_ss_zzz");
+						txtFilename += QObject::tr("_%1").arg(timestamp);
+					}
+					txtFilename += QObject::tr(".txt");
 				}
-				txtFilename += QObject::tr(".txt");
 				QFile txtFile(txtFilename);
 				if (txtFile.open(QIODevice::WriteOnly | QIODevice::Text))
 				{
@@ -5916,6 +5948,90 @@ bool CommandStatTest::process(ccCommandLineInterface& cmd)
 	return true;
 }
 
+CommandStatFit::CommandStatFit()
+    : ccCommandLineInterface::Command(QObject::tr("Statistical model fitting"), COMMAND_STAT_FIT)
+{
+}
+
+bool CommandStatFit::process(ccCommandLineInterface& cmd)
+{
+	// distribution
+	if (cmd.arguments().empty())
+	{
+		return cmd.error(QObject::tr("Missing parameter: distribution type after \"-%1\" (GAUSS/WEIBULL)").arg(COMMAND_STAT_FIT));
+	}
+
+	QString distribStr = cmd.arguments().takeFirst().toUpper();
+	if (distribStr != "GAUSS" && distribStr != "WEIBULL")
+	{
+		return cmd.error(QObject::tr("Invalid parameter: unknown distribution '%1' after \"-%2\" (GAUSS/WEIBULL)").arg(distribStr, COMMAND_STAT_FIT));
+	}
+
+	if (cmd.clouds().empty())
+	{
+		return cmd.error(QObject::tr("No cloud available. Be sure to open one first!"));
+	}
+
+	int precision = cmd.numericalPrecision();
+
+	for (CLCloudDesc& desc : cmd.clouds())
+	{
+		// we apply the method on the currently 'output' SF (the one '-SET_ACTIVE_SF' sets)
+		CCCoreLib::ScalarField* sf = desc.pc->getCurrentOutScalarField();
+		if (!sf)
+		{
+			cmd.warning(QObject::tr("Cloud '%1' has no active scalar field. Set one with '-%2'").arg(desc.pc->getName(), COMMAND_SET_ACTIVE_SF));
+			continue;
+		}
+
+		if (sf->countValidValues() == 0)
+		{
+			cmd.warning(QObject::tr("Scalar field '%1' of cloud '%2' has no valid values").arg(QString::fromStdString(sf->getName()), desc.pc->getName()));
+			continue;
+		}
+
+		QScopedPointer<CCCoreLib::GenericDistribution> distrib;
+		if (distribStr == "GAUSS")
+		{
+			distrib.reset(new CCCoreLib::NormalDistribution());
+		}
+		else
+		{
+			distrib.reset(new CCCoreLib::WeibullDistribution());
+		}
+
+		if (!distrib->computeParameters(CCCoreLib::GenericDistribution::SFAsScalarContainer(*sf)))
+		{
+			cmd.warning(QObject::tr("Failed to compute the %1 distribution parameters for cloud '%2'").arg(distrib->getName(), desc.pc->getName()));
+			continue;
+		}
+
+		QString description;
+		if (distribStr == "GAUSS")
+		{
+			const CCCoreLib::NormalDistribution* normal = static_cast<const CCCoreLib::NormalDistribution*>(distrib.data());
+			description                                 = QObject::tr("mean = %1 / std.dev. = %2").arg(normal->getMu(), 0, 'f', precision).arg(sqrt(normal->getSigma2()), 0, 'f', precision);
+		}
+		else
+		{
+			const CCCoreLib::WeibullDistribution* weibull = static_cast<const CCCoreLib::WeibullDistribution*>(distrib.data());
+			ScalarType                            a       = 0;
+			ScalarType                            b       = 0;
+			weibull->getParameters(a, b);
+			description = QString("a = %1 / b = %2 / shift = %3").arg(a, 0, 'f', precision).arg(b, 0, 'f', precision).arg(weibull->getValueShift(), 0, 'f', precision);
+			cmd.print(QObject::tr("[Distribution fitting] Additional Weibull distrib. parameters: mode = %1 / skewness = %2").arg(weibull->computeMode()).arg(weibull->computeSkewness()));
+		}
+
+		cmd.print(QObject::tr("[Distribution fitting] Cloud '%1' (SF '%2') - %3: %4")
+		              .arg(desc.pc->getName())
+		              .arg(QString::fromStdString(sf->getName()))
+		              .arg(distrib->getName())
+		              .arg(description));
+	}
+
+	return true;
+}
+
 CommandDelaunayTri::CommandDelaunayTri()
     : ccCommandLineInterface::Command(QObject::tr("Delaunay triangulation"), COMMAND_DELAUNAY)
 {
@@ -6928,6 +7044,7 @@ bool CommandICP::process(ccCommandLineInterface& cmd)
 	bool                                              useC2MDistances       = false;
 	bool                                              robustC2MDistances    = true;
 	CCCoreLib::ICPRegistrationTools::NORMALS_MATCHING normalsMatching       = CCCoreLib::ICPRegistrationTools::NO_NORMAL;
+	QString                                           outputMatrixFile;
 
 	ccArgumentParser parser(cmd.arguments());
 
@@ -7006,6 +7123,16 @@ bool CommandICP::process(ccCommandLineInterface& cmd)
 			if (!maybemaxThreadCount)
 				return false;
 			maxThreadCount = *maybemaxThreadCount;
+		}
+		else if (parser.tryConsumeOption(COMMAND_ICP_OUTPUT_MATRIX_FILE))
+		{
+			if (parser.isEmpty())
+			{
+				return cmd.error(QObject::tr("Missing parameter: filename after \"-%1\"").arg(COMMAND_ICP_OUTPUT_MATRIX_FILE));
+			}
+
+			outputMatrixFile = parser.takeNext();
+			cmd.print(QObject::tr("[ICP] Registration matrix file: %1").arg(outputMatrixFile));
 		}
 		else if (parser.tryConsumeOption(COMMAND_ICP_ROT))
 		{
@@ -7212,13 +7339,18 @@ bool CommandICP::process(ccCommandLineInterface& cmd)
 
 		// save matrix in a separate text file
 		{
-			QString txtFilename = QObject::tr("%1/%2_REGISTRATION_MATRIX").arg(dataAndModel[0]->path, dataAndModel[0]->basename);
-			if (cmd.addTimestamp())
+			// the user can force the output path, in which case it is used as is
+			QString txtFilename = outputMatrixFile;
+			if (txtFilename.isEmpty())
 			{
-				QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_hh'h'mm_ss_zzz");
-				txtFilename += QString("_%1").arg(timestamp);
+				txtFilename = QObject::tr("%1/%2_REGISTRATION_MATRIX").arg(dataAndModel[0]->path, dataAndModel[0]->basename);
+				if (cmd.addTimestamp())
+				{
+					QString timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd_hh'h'mm_ss_zzz");
+					txtFilename += QString("_%1").arg(timestamp);
+				}
+				txtFilename += ".txt";
 			}
-			txtFilename += ".txt";
 			QFile txtFile(txtFilename);
 			if (txtFile.open(QIODevice::WriteOnly | QIODevice::Text))
 			{
@@ -7284,6 +7416,19 @@ bool CommandChangePLYExportFormat::process(ccCommandLineInterface& cmd)
 	{
 		return cmd.error(QObject::tr("Invalid PLY format! ('%1')").arg(plyFormat));
 	}
+
+	return true;
+}
+
+CommandPLYNoSFPrefix::CommandPLYNoSFPrefix()
+    : ccCommandLineInterface::Command(QObject::tr("Don't add the 'scalar_' prefix to PLY scalar fields"), COMMAND_PLY_NO_SF_PREFIX)
+{
+}
+
+bool CommandPLYNoSFPrefix::process(ccCommandLineInterface& cmd)
+{
+	PlyFilter::SetAddSFPrefix(false);
+	cmd.print(QObject::tr("[PLY] Scalar field names will be saved without the 'scalar_' prefix"));
 
 	return true;
 }
@@ -7935,6 +8080,14 @@ bool CommandFeature::process(ccCommandLineInterface& cmd)
 	{
 		featureType = CCCoreLib::Neighbourhood::EigenValue3;
 	}
+	else if (featureTypeStr == "DEGREE_OF_PLANARITY")
+	{
+		featureType = CCCoreLib::Neighbourhood::DegreeOfPlanarity;
+	}
+	else if (featureTypeStr == "DEGREE_OF_LINEARITY")
+	{
+		featureType = CCCoreLib::Neighbourhood::DegreeOfLinearity;
+	}
 	else
 	{
 		return cmd.error(QObject::tr("Invalid feature type after \"-%1\". Got '%2' instead of:\n\
@@ -7951,7 +8104,9 @@ bool CommandFeature::process(ccCommandLineInterface& cmd)
 - VERTICALITY\n\
 - EIGENVALUE1\n\
 - EIGENVALUE2\n\
-- EIGENVALUE3")
+- EIGENVALUE3\n\
+- DEGREE_OF_PLANARITY\n\
+- DEGREE_OF_LINEARITY")
 		                     .arg(COMMAND_FEATURE, featureTypeStr));
 	}
 
