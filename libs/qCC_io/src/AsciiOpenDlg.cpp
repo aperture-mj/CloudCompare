@@ -430,16 +430,18 @@ void AsciiOpenDlg::updateTable()
 	}
 	m_ui->tableWidget->setRowCount(DISPLAYED_LINES + 1); //+1 for first line shifting
 
-	unsigned lineCount     = 0; // number of lines read
-	unsigned totalChars    = 0; // total read characters (for stats)
-	unsigned columnsCount  = 0; // max columns count per line
-	unsigned commentLines  = 0; // number of comments line skipped
-	unsigned maxPartsCount = 0; // max columns count per line, before it's clamped to MAX_COLUMNS
+	unsigned lineCount          = 0; // number of lines read
+	unsigned totalChars         = 0; // total read characters (for stats)
+	unsigned columnsCount       = 0; // max columns count per line
+	unsigned commentLines       = 0; // number of comments line skipped
+	unsigned maxPartsCount      = 0; // max columns count per line, before it's clamped to MAX_COLUMNS
+	unsigned firstRowPartsCount = 0; // columns count of the very first (non-comment) row
 
 	std::vector<bool> valueIsNumber;   // identifies columns with numbers only [mandatory]
 	std::vector<bool> valueIsBelowOne; // identifies columns with values between -1 and 1 only
 	std::vector<bool> valueIsInteger;  // identifies columns with integer values only
 	std::vector<bool> valueIsBelow255; // identifies columns with integer values between 0 and 255 only
+	std::vector<bool> valueIsZero;     // identifies columns with a value of exactly 0 only (used to detect a mis-guessed 'Red' column)
 
 	bool    commaAsDecimal = useCommaAsDecimal();
 	QLocale locale(commaAsDecimal ? QLocale::French : QLocale::English);
@@ -470,6 +472,18 @@ void AsciiOpenDlg::updateTable()
 					maxPartsCount = rawPartsCount;
 				}
 
+				// if the very first row has fewer columns than the row right after it, it's
+				// probably a header/junk row - skip it automatically (same idea as the existing
+				// auto-skip for a leading comment line below, just for column count)
+				if (lineCount == 0)
+				{
+					firstRowPartsCount = rawPartsCount;
+				}
+				else if (lineCount == 1 && m_ui->spinBoxSkipLines->value() == 0 && rawPartsCount > firstRowPartsCount)
+				{
+					setSkippedLines(1, true);
+				}
+
 				unsigned partsCount              = std::min(MAX_COLUMNS, rawPartsCount);
 				bool     columnCountHasIncreased = (partsCount > columnsCount);
 
@@ -483,6 +497,7 @@ void AsciiOpenDlg::updateTable()
 						valueIsBelowOne.push_back(true);
 						valueIsBelow255.push_back(true);
 						valueIsInteger.push_back(true);
+						valueIsZero.push_back(true);
 					}
 
 					if (m_ui->tableWidget->columnCount() < static_cast<int>(partsCount))
@@ -518,6 +533,7 @@ void AsciiOpenDlg::updateTable()
 						valueIsBelowOne[i] = false;
 						valueIsInteger[i]  = false;
 						valueIsBelow255[i] = false;
+						valueIsZero[i]     = false;
 						newItem->setBackground(QBrush(QColor(255, 160, 160)));
 					}
 					else
@@ -530,10 +546,12 @@ void AsciiOpenDlg::updateTable()
 							valueIsBelowOne[i] = true;
 							valueIsInteger[i]  = true;
 							valueIsBelow255[i] = true;
+							valueIsZero[i]     = true;
 						}
 						valueIsBelowOne[i] = valueIsBelowOne[i] && (std::abs(value) <= 1.0);
 						valueIsInteger[i]  = valueIsInteger[i] && !parts[i].contains(decimalPoint);
 						valueIsBelow255[i] = valueIsBelow255[i] && valueIsInteger[i] && (value >= 0.0 && value <= 255.0);
+						valueIsZero[i]     = valueIsZero[i] && (value == 0.0);
 					}
 
 					m_ui->tableWidget->setItem(lineCount + 1, i, newItem); //+1 for first line shifting
@@ -996,8 +1014,8 @@ void AsciiOpenDlg::updateTable()
 						// looks like RGB?
 						if (valueIsBelow255[i]
 						    && assignedRGBFlags < XYZ_BITS
-						    && (i + 2 - EnabledBits(assignedRGBFlags)) < columnsCount                                    // make sure that we can put all values there!
-						    && (EnabledBits(assignedRGBFlags) > 0 || (valueIsBelow255[i + 1] && valueIsBelow255[i + 2])) // make sure that next values are also ok!
+						    && (i + 2 - EnabledBits(assignedRGBFlags)) < columnsCount                                                          // make sure that we can put all values there!
+						    && (EnabledBits(assignedRGBFlags) > 0 || (valueIsBelow255[i + 1] && valueIsBelow255[i + 2] && !valueIsZero[i]))     // make sure that next values are also ok! (and this isn't actually an all-zero scalar field mistaken for Red)
 						)
 						{
 							if (!(assignedRGBFlags & X_BIT))
