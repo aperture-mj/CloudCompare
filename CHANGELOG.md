@@ -355,6 +355,9 @@ Improvements:
 	- SOR/Cleaning filters
 		- the user can now choose the number of threads to use
 
+	- ICP
+		- new option to define/restrict the scaling range if 'adjust scale' is enabled
+
 	- Others:
 		- the Subsampling dialog won't allow the user to input sampling modulation parameters if all SF values are the same
 		- the shortcut to the 'Level' tool in the 'View' toolbar (left) has been removed. Contrarily to the other options in this toolbar,
@@ -372,6 +375,7 @@ Improvements:
 			(only the first 512 columns are loaded, the other ones were previously ignored silently)
 
 Bug fixes:
+	- ASCII files saved with legacy Mac line endings (a lone CR) were read as a single line, silently loading only one point
 	- the weights derived from normals comparison during ICP registration of 2 clouds could be wrong (the wrong normals were compared)
 	- editing the Global Shift & Scale information of a polyline would make CC crash
 	- segmenting a cloud with polylines depending on it but not directly present below the cloud entity in the DB tree could lead
