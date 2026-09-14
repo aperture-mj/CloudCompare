@@ -155,7 +155,7 @@ Improvements:
 		- use of a LUT texture with uncompressed normals
 		- use of a color scale texture when displaying scalar fields
 		- visibility filtering done in the same program
-		- (does not work with partial or textured meshes yet)
+		- (does not work for meshes with partial visibility or multi-textured yet)
 
 	- Display > Lock rotation about an axis
 		- now a proper 'turntable' rotation mode
@@ -360,12 +360,21 @@ Improvements:
 		- new geometric features: (from "Obtaining a Best Fitting Plane Through 3D Georeferenced Data", Fernandez, 2005)
 			- Degree of planarity (M): ln(L1 / L3)
 			- Degree of linearity (K): ln(L1 / L2) / ln(L2 / L3)
+		- the approximate density can be computed again (it was only reachable with the -APPROX_DENSITY
+			command line option since 2.10)
+			- it only looks at the nearest neighbor, so it ignores the radius and is much faster than the
+				exact density on large neighborhoods
+			- the 'number of neighbors' variant is in fact the inverse of the distance to the nearest
+				neighbor, and its scalar field is now named accordingly
 
 	- SOR/Cleaning filters
 		- the user can now choose the number of threads to use
 
 	- ICP
 		- new option to define/restrict the scaling range if 'adjust scale' is enabled
+
+	- Cross Section (clipping box) tool
+		- new 'invert' button to invert the selection (i.e. the 'inside' and 'outside' of the box)
 
 	- Others:
 		- the Subsampling dialog won't allow the user to input sampling modulation parameters if all SF values are the same
