@@ -1,3 +1,5 @@
+#pragma once
+
 //##########################################################################
 //#                                                                        #
 //#                       CLOUDCOMPARE PLUGIN: qBroom                      #
@@ -15,15 +17,13 @@
 //#                                                                        #
 //##########################################################################
 
-#ifndef CC_BROOM_DLG_HEADER
-#define CC_BROOM_DLG_HEADER
-
 #include "ui_broomDlg.h"
 
 //CCCoreLib
 #include <CCGeom.h>
 
 //qCC_db
+#include <ccAdvancedTypes.h>
 #include <ccGLMatrix.h>
 
 //system
@@ -41,7 +41,6 @@ class ccScalarField;
 class ccProgressDialog;
 class ccGenericGLDisplay;
 class ccMainAppInterface;
-class RGBAColorsTableType;
 
 //! Dialog for the qBroom plugin
 class qBroomDlg : public QDialog, public Ui::BroomDialog
@@ -189,7 +188,7 @@ protected: //members
 	struct CloudBackup
 	{
 		ccPointCloud* ref;
-		RGBAColorsTableType* colors;
+		RGBAColorsTableType::Shared colors;
 		bool hadColors;
 		int displayedSFIndex;
 		ccGenericGLDisplay* originDisplay;
@@ -313,5 +312,3 @@ protected: //members
 	//! Points removed so far this session (across one or more 'Apply' passes), pending finalization
 	ccPointCloud* m_removedPoints;
 };
-
-#endif

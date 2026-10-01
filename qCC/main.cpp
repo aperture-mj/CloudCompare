@@ -191,7 +191,7 @@ int main(int argc, char** argv)
 
 		// init splash screen
 		QPixmap pixmap(QString::fromUtf8(":/CC/images/imLogoV2Qt.png"));
-		splash.reset(new QSplashScreen(pixmap, Qt::WindowStaysOnTopHint));
+		splash = std::make_unique<QSplashScreen>(pixmap, Qt::WindowStaysOnTopHint);
 		splash->show();
 	}
 
@@ -257,7 +257,7 @@ int main(int argc, char** argv)
 			QStringList filenames;
 			for (int i = lastArgumentIndex; i < argc; ++i)
 			{
-				QString arg = argumentsLocal8Bit[i];
+				const QString& arg = argumentsLocal8Bit[i];
 
 				// special command: auto start a plugin
 				if (arg.startsWith(":start-plugin:"))
@@ -293,6 +293,10 @@ int main(int argc, char** argv)
 
 			mainWindow->addToDB(filenames);
 		}
+
+		// open the files the system asked to open during startup
+		// (a FileOpen event, e.g. double-clicked in the macOS Finder)
+		app.setMainWindowReady();
 
 		// change the default path to the application one (do this AFTER processing the command line)
 		QDir workingDir = QCoreApplication::applicationDirPath();
@@ -333,16 +337,6 @@ int main(int argc, char** argv)
 	// release global structures
 	MainWindow::DestroyInstance();
 	FileIOFilter::UnregisterAll();
-
-#ifdef CC_TRACK_ALIVE_SHARED_OBJECTS
-	// for debug purposes
-	unsigned alive = CCShareable::GetAliveCount();
-	if (alive > 1)
-	{
-		printf("Error: some shared objects (%u) have not been released on program end!", alive);
-		system("PAUSE");
-	}
-#endif
 
 	return result;
 }

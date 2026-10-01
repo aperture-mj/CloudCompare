@@ -529,7 +529,7 @@ class MainWindow : public QMainWindow
 	//! Creates point clouds from multiple 'components'
 	void createComponentsClouds(ccGenericPointCloud*                cloud,
 	                            CCCoreLib::ReferenceCloudContainer& components,
-	                            unsigned                            minPointPerComponent,
+	                            unsigned                            minPointsPerComponent,
 	                            bool                                randomColors,
 	                            bool                                selectComponents,
 	                            bool                                sortBysize = true);
@@ -597,7 +597,7 @@ class MainWindow : public QMainWindow
 
   private: // members
 	//! Main UI
-	Ui::MainWindow* m_UI;
+	std::unique_ptr<Ui::MainWindow> m_ui;
 
 	//! DB tree
 	ccDBRoot* m_ccRoot;
