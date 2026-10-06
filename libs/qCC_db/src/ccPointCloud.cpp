@@ -1102,7 +1102,7 @@ const ccPointCloud& ccPointCloud::append(ccPointCloud* addedCloud, unsigned poin
 					else
 					{
 						newSF.reset();
-						ccLog::Warning("[ccPointCloud::Merge] Not enough memory: failed to allocate a copy of scalar field '%s'", sf->getName().c_str());
+						ccLog::Warningf("[ccPointCloud::Merge] Not enough memory: failed to allocate a copy of scalar field '%s'", sf->getName().c_str());
 					}
 				}
 			}
@@ -2799,12 +2799,13 @@ void ccPointCloud::ReleaseOpenGLRessources()
 }
 
 /// Maximum number of points (per cloud) displayed in a single LOD iteration
-// warning MUST BE GREATER THAN 'MAX_NUMBER_OF_ELEMENTS_PER_CHUNK'
+// warning MUST BE GREATER THAN 'ccChunk::SIZE'
 #ifdef _DEBUG
 static const unsigned MAX_POINT_COUNT_PER_LOD_RENDER_PASS = (1 << 16); //~ 64K
 #else
-static const unsigned MAX_POINT_COUNT_PER_LOD_RENDER_PASS = (1 << 19); //~ 512K
+static const unsigned MAX_POINT_COUNT_PER_LOD_RENDER_PASS = (1 << 20); //~ 1M
 #endif
+static_assert(MAX_POINT_COUNT_PER_LOD_RENDER_PASS >= ccChunk::SIZE, "MAX_POINT_COUNT_PER_LOD_RENDER_PASS must be greater than ccChunk::SIZE");
 
 // Vertex indexes for OpenGL "arrays" drawing
 static PointCoordinateType s_pointBuffer[MAX_POINT_COUNT_PER_LOD_RENDER_PASS * 3];
@@ -5357,11 +5358,11 @@ bool ccPointCloud::toFile_MeOnly(QFile& out, short dataVersion) const
 	return true;
 }
 
-bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, LoadedIDMap& oldToNewIDMap)
+bool ccPointCloud::fromFile_MeOnly(QFile& in, LoadingContext& context)
 {
 	ccLog::PrintVerbose(QString("Loading cloud %1...").arg(m_name));
 
-	if (!ccGenericPointCloud::fromFile_MeOnly(in, dataVersion, flags, oldToNewIDMap))
+	if (!ccGenericPointCloud::fromFile_MeOnly(in, context))
 	{
 		return false;
 	}
@@ -5369,18 +5370,18 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 	// points array (dataVersion>=20)
 	{
 		bool result            = false;
-		bool fileCoordIsDouble = (flags & ccSerializableObject::DF_POINT_COORDS_64_BITS);
+		bool fileCoordIsDouble = (context.flags & ccSerializableObject::DF_POINT_COORDS_64_BITS);
 		if (!fileCoordIsDouble && sizeof(PointCoordinateType) == 8) // file is 'float' and current type is 'double'
 		{
-			result = ccSerializationHelper::GenericArrayFromTypedFile<CCVector3, 3, PointCoordinateType, float>(m_points, in, dataVersion, "3D points");
+			result = ccSerializationHelper::GenericArrayFromTypedFile<CCVector3, 3, PointCoordinateType, float>(m_points, in, context.dataVersion, "3D points");
 		}
 		else if (fileCoordIsDouble && sizeof(PointCoordinateType) == 4) // file is 'double' and current type is 'float'
 		{
-			result = ccSerializationHelper::GenericArrayFromTypedFile<CCVector3, 3, PointCoordinateType, double>(m_points, in, dataVersion, "3D points");
+			result = ccSerializationHelper::GenericArrayFromTypedFile<CCVector3, 3, PointCoordinateType, double>(m_points, in, context.dataVersion, "3D points");
 		}
 		else
 		{
-			result = ccSerializationHelper::GenericArrayFromFile<CCVector3, 3, PointCoordinateType>(m_points, in, dataVersion, "3D points");
+			result = ccSerializationHelper::GenericArrayFromFile<CCVector3, 3, PointCoordinateType>(m_points, in, context.dataVersion, "3D points");
 		}
 		if (!result)
 		{
@@ -5422,11 +5423,11 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 			{
 				m_rgbaColors.reset(new RGBAColorsTableType);
 			}
-			CC_CLASS_ENUM classID = ReadClassIDFromFile(in, dataVersion);
+			CC_CLASS_ENUM classID = ReadClassIDFromFile(in, context.dataVersion);
 			if (classID == CC_TYPES::RGB_COLOR_ARRAY)
 			{
 				QSharedPointer<ColorsTableType> oldRGBColors(new ColorsTableType);
-				if (!oldRGBColors->fromFile(in, dataVersion, flags, oldToNewIDMap))
+				if (!oldRGBColors->fromFile(in, context))
 				{
 					unallocateColors();
 					return false;
@@ -5446,7 +5447,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 			}
 			else if (classID == CC_TYPES::RGBA_COLOR_ARRAY)
 			{
-				if (!m_rgbaColors->fromFile(in, dataVersion, flags, oldToNewIDMap))
+				if (!m_rgbaColors->fromFile(in, context))
 				{
 					unallocateColors();
 					return false;
@@ -5473,13 +5474,13 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 			{
 				m_normals.reset(new NormsIndexesTableType);
 			}
-			CC_CLASS_ENUM classID = ReadClassIDFromFile(in, dataVersion);
+			CC_CLASS_ENUM classID = ReadClassIDFromFile(in, context.dataVersion);
 			if (classID != CC_TYPES::NORMAL_INDEXES_ARRAY)
 			{
 				unallocateNorms();
 				return CorruptError();
 			}
-			if (!m_normals->fromFile(in, dataVersion, flags, oldToNewIDMap))
+			if (!m_normals->fromFile(in, context))
 			{
 				unallocateNorms();
 				return false;
@@ -5500,14 +5501,14 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 		for (uint32_t i = 0; i < sfCount; ++i)
 		{
 			auto sf = std::make_shared<ccScalarField>();
-			if (!sf->fromFile(in, dataVersion, flags, oldToNewIDMap))
+			if (!sf->fromFile(in, context))
 			{
 				return false;
 			}
 			addScalarField(sf);
 		}
 
-		if (dataVersion < 27)
+		if (context.dataVersion < 27)
 		{
 			//'show NaN values in grey' state (27>dataVersion>=20)
 			bool greyForNanScalarValues = true;
@@ -5542,7 +5543,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 	}
 
 	// grid structures (dataVersion>=41)
-	if (dataVersion >= 41)
+	if (context.dataVersion >= 41)
 	{
 		// number of grids
 		uint32_t count = 0;
@@ -5556,7 +5557,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 		{
 			Grid::Shared g(new Grid);
 
-			if (!g->fromFile(in, dataVersion, flags, oldToNewIDMap))
+			if (!g->fromFile(in, context))
 			{
 				return false;
 			}
@@ -5566,7 +5567,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 	}
 
 	// Waveforms (dataVersion >= 44)
-	if (dataVersion >= 44)
+	if (context.dataVersion >= 44)
 	{
 		bool withFWF = false;
 		if (in.read((char*)&withFWF, sizeof(bool)) < 0)
@@ -5592,7 +5593,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 				}
 				// read the descriptor
 				WaveformDescriptor d;
-				if (!d.fromFile(in, dataVersion, flags, oldToNewIDMap))
+				if (!d.fromFile(in, context))
 				{
 					m_fwfDescriptors.clear();
 					return ReadError();
@@ -5620,7 +5621,7 @@ bool ccPointCloud::fromFile_MeOnly(QFile& in, short dataVersion, int flags, Load
 			}
 			for (uint32_t i = 0; i < waveformCount; ++i)
 			{
-				if (!m_fwfWaveforms[i].fromFile(in, dataVersion, flags, oldToNewIDMap))
+				if (!m_fwfWaveforms[i].fromFile(in, context))
 				{
 					m_fwfWaveforms.clear();
 					m_fwfDescriptors.clear();
@@ -5723,7 +5724,7 @@ bool ccPointCloud::Grid::toFile(QFile& out, short dataVersion) const
 	return true;
 }
 
-bool ccPointCloud::Grid::fromFile(QFile& in, short dataVersion, int flags, LoadedIDMap& oldToNewIDMap)
+bool ccPointCloud::Grid::fromFile(QFile& in, LoadingContext& context)
 {
 	// width (dataVersion>=41)
 	uint32_t _w = 0;
@@ -5738,7 +5739,7 @@ bool ccPointCloud::Grid::fromFile(QFile& in, short dataVersion, int flags, Loade
 	h = static_cast<unsigned>(_h);
 
 	// sensor matrix (dataVersion>=41)
-	if (!sensorPosition.fromFile(in, dataVersion, flags, oldToNewIDMap))
+	if (!sensorPosition.fromFile(in, context))
 		return WriteError();
 
 	try
@@ -6670,7 +6671,7 @@ bool ccPointCloud::computeNormalsWithOctree(CCCoreLib::LOCAL_MODEL_TYPES model,
 		return false;
 	}
 
-	ccLog::Print("[ComputeCloudNormals] Timing: %3.2f s.", eTimer.elapsed() / 1000.0);
+	ccLog::Printf("[ComputeCloudNormals] Timing: %3.2f s.", eTimer.elapsed() / 1000.0);
 
 	if (!hasNormals())
 	{
