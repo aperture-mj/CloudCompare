@@ -52,10 +52,12 @@
 
 // qCC_glWindow
 #include <ccGLWindowInterface.h>
+#include <ccGuiParameters.h>
 
 // Qt
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QFileDialog>
 #include <QHeaderView>
 #include <QInputDialog>
@@ -926,6 +928,21 @@ void ccDBRoot::changeSelection(const QItemSelection& selected, const QItemSelect
 	}
 
 	updatePropertiesView();
+
+	// selecting a single-point label (e.g. a 'Point #n' from Point List Picking) copies its coordinates to the clipboard
+	QModelIndexList currentSelection = m_dbTreeWidget->selectionModel()->selectedIndexes();
+	if (currentSelection.size() == 1)
+	{
+		ccHObject* obj = static_cast<ccHObject*>(currentSelection[0].internalPointer());
+		if (obj && obj->isA(CC_TYPES::LABEL_2D) && static_cast<cc2DLabel*>(obj)->size() == 1)
+		{
+			CCVector3 P         = static_cast<cc2DLabel*>(obj)->getPickedPoint(0).getPointPosition();
+			int       precision = ccGui::Parameters().displayedNumPrecision;
+			QString   coordsStr = QString("%1,%2,%3").arg(P.x, 0, 'f', precision).arg(P.y, 0, 'f', precision).arg(P.z, 0, 'f', precision);
+			QGuiApplication::clipboard()->setText(coordsStr);
+			ccLog::Print(QString("[%1] Copied to clipboard: %2").arg(obj->getName(), coordsStr));
+		}
+	}
 
 	MainWindow::RefreshAllGLWindow();
 
