@@ -48,7 +48,7 @@
 #include <cassert>
 
 // Semi persistent settings
-static int        s_pickedPointsStartIndex          = 0;
+static int        s_pickedPointsStartIndex          = 1;
 static bool       s_showGlobalCoordsCheckBoxChecked = false;
 static const char s_pickedPointContainerName[]      = "Picked points list";
 static const char s_defaultLabelBaseName[]          = "Point #";
